@@ -89,8 +89,15 @@ object RootfsInstaller {
                 busybox, "tar", "-xJf", tarFile.absolutePath, "-C", ubuntuDir.absolutePath
             ).start()
             
-            process.waitFor()
+            val exitCode = process.waitFor()
             tarFile.delete() // Cleanup
+            
+            if (exitCode != 0) {
+                Log.e(TAG, "Extraction failed with exit code $exitCode")
+                // Clean up broken directory to trigger retry next time
+                ubuntuDir.deleteRecursively()
+                return@withContext null
+            }
             
             markerFile.createNewFile()
             return@withContext ubuntuDir.absolutePath
@@ -126,7 +133,8 @@ object RootfsInstaller {
         val wrapper = File(binDir, "staff-shell")
         wrapper.writeText("""
             #!/system/bin/sh
-            exec $proot -0 -r $rootfs -b /dev -b /proc -b /sys -w /root /usr/bin/env -i HOME=/root TERM=x86-64 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin /bin/bash
+            export PROOT_SKIP_LDPRELOAD=1
+            exec $proot --link2symlink -0 -r $rootfs -b /dev -b /proc -b /sys -b /sdcard -b ${context.filesDir.absolutePath}:/home/elysium -w /root /usr/bin/env -i HOME=/root TERM=xterm-256color PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin /bin/bash
         """.trimIndent())
         wrapper.setExecutable(true)
         return wrapper.absolutePath

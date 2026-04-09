@@ -212,7 +212,7 @@ fun ElysiumNavHost(viewModel: com.elysium.code.viewmodel.MainViewModel) {
                 EnhancedChatScreen(viewModel = viewModel)
             }
             composable(Screen.Settings.route) {
-                SettingsScreen()
+                SettingsScreen(viewModel = viewModel)
             }
         }
     }

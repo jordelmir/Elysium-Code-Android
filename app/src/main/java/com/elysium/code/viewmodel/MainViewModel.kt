@@ -244,6 +244,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         agentOrchestrator.processUserMessage(text, imageData, audioData)
     }
 
+    /**
+     * Extracts byte data from a content URI for multimodal processing.
+     */
+    fun handleMediaUri(uri: android.net.Uri, type: String): ByteArray? {
+        return try {
+            getApplication<Application>().contentResolver.openInputStream(uri)?.use { 
+                it.readBytes()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to read media URI", e)
+            null
+        }
+    }
+
     fun cancelGeneration() {
         if (::agentOrchestrator.isInitialized) {
             agentOrchestrator.cancelProcessing()

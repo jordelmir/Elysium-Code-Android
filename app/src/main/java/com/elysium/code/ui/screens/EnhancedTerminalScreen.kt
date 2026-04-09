@@ -232,6 +232,52 @@ fun EnhancedTerminalScreen(viewModel: MainViewModel = viewModel()) {
             }
         }
 
+        // ═══ Special Keys Bar ═══
+        Surface(
+            color = Color(0xFF0F0F1A),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 4.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                val specialKeys = listOf("ESC", "TAB", "CTRL", "ALT", "{", "}", "[", "]", "/", "|", "-", "_")
+                specialKeys.forEach { key ->
+                    Surface(
+                        onClick = {
+                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                            // For now, these append to input as we are in a stateless shell model
+                            // A future update will integrate these with a PTY for raw control signals
+                            val appendChar = when(key) {
+                                "TAB" -> "  "
+                                "ESC" -> "" 
+                                "CTRL", "ALT" -> "" // Modifiers need PTY support
+                                else -> key
+                            }
+                            inputText = TextFieldValue(
+                                text = inputText.text + appendChar,
+                                selection = androidx.compose.ui.text.TextRange(inputText.text.length + appendChar.length)
+                            )
+                        },
+                        shape = RoundedCornerShape(4.dp),
+                        color = Color(0xFF39FF14).copy(alpha = 0.08f),
+                        border = BorderStroke(1.dp, Color(0xFF39FF14).copy(alpha = 0.2f)),
+                        modifier = Modifier.padding(2.dp)
+                    ) {
+                        Text(
+                            text = key,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            style = ElysiumTheme.typography.terminal.copy(fontSize = 12.sp),
+                            color = Color(0xFF39FF14).copy(alpha = 0.8f)
+                        )
+                    }
+                }
+            }
+        }
+
         // ═══ Input Area ═══
         Surface(
             color = Color(0xFF080810),

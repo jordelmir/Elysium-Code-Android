@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.elysium.code.ui.theme.ElysiumTheme
+import kotlinx.coroutines.launch
 
 /**
  * ═══════════════════════════════════════════════════════════════
@@ -37,6 +38,7 @@ import com.elysium.code.ui.theme.ElysiumTheme
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(viewModel: com.elysium.code.viewmodel.MainViewModel = androidx.lifecycle.viewmodel.compose.viewModel()) {
+    val coroutineScope = rememberCoroutineScope()
     val activePersonality by viewModel.personalityEngine.activePersonality.collectAsState()
     var selectedPersonalityId by remember(activePersonality) { mutableStateOf(activePersonality?.id ?: "architect") }
     val stats by viewModel.memoryEngine.stats.collectAsState()
@@ -102,12 +104,24 @@ fun SettingsScreen(viewModel: com.elysium.code.viewmodel.MainViewModel = android
                     Spacer(Modifier.height(12.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        StatChip("Context", "4K tokens")
-                        StatChip("Threads", "4")
-                        StatChip("RAM", "~1.5 GB")
-                        StatChip("Speed", "~10 tok/s")
+                        Column {
+                            StatChip("Size", "2.5 GB")
+                            StatChip("Status", if (viewModel.llamaEngine.isReady()) "LOADED" else "PENDING")
+                        }
+                        Button(
+                            onClick = { 
+                                coroutineScope.launch {
+                                    viewModel.modelManager.extractModelIfNeeded()
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = ElysiumTheme.colors.primary.copy(alpha = 0.2f)),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("PROVISION LOCAL", style = ElysiumTheme.typography.labelSmall, color = ElysiumTheme.colors.primary)
+                        }
                     }
                 }
             }

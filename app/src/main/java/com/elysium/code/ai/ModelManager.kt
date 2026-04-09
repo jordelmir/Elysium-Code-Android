@@ -89,6 +89,19 @@ class ModelManager(private val context: Context) {
             return@withContext true
         }
 
+        // --- NEW: Check for Sideloaded Model first ---
+        val publicDocs = File("/sdcard/Documents/Elysium/models", MODEL_FILENAME)
+        if (publicDocs.exists()) {
+            Log.i(TAG, "Found sideloaded model. Importing...")
+            try {
+                publicDocs.inputStream().use { input ->
+                    FileOutputStream(modelFile).use { output -> input.copyTo(output) }
+                }
+                markerFile.createNewFile()
+                return@withContext true
+            } catch (e: Exception) { Log.e(TAG, "Sideload import failed", e) }
+        }
+
         Log.i(TAG, "Model not ready. Attempting extraction from assets...")
         
         try {
