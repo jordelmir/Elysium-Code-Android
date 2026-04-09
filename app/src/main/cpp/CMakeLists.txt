@@ -65,9 +65,41 @@ add_subdirectory(${LLAMA_CPP_DIR} llama.cpp.build)
 # ELYSIUM NATIVE LIBRARY (JNI bridge + PTY)
 # ═══════════════════════════════════════════════════════════════
 
+# ═══ mtmd & CLIP sources ═══
+set(MTMD_DIR "${LLAMA_CPP_DIR}/tools/mtmd")
+set(MTMD_SRCS
+    ${MTMD_DIR}/mtmd.cpp
+    ${MTMD_DIR}/mtmd-audio.cpp
+    ${MTMD_DIR}/mtmd-image.cpp
+    ${MTMD_DIR}/mtmd-helper.cpp
+    ${MTMD_DIR}/clip.cpp
+    ${MTMD_DIR}/models/cogvlm.cpp
+    ${MTMD_DIR}/models/conformer.cpp
+    ${MTMD_DIR}/models/gemma4v.cpp
+    ${MTMD_DIR}/models/glm4v.cpp
+    ${MTMD_DIR}/models/hunyuanocr.cpp
+    ${MTMD_DIR}/models/internvl.cpp
+    ${MTMD_DIR}/models/kimivl.cpp
+    ${MTMD_DIR}/models/kimik25.cpp
+    ${MTMD_DIR}/models/nemotron-v2-vl.cpp
+    ${MTMD_DIR}/models/llama4.cpp
+    ${MTMD_DIR}/models/llava.cpp
+    ${MTMD_DIR}/models/minicpmv.cpp
+    ${MTMD_DIR}/models/paddleocr.cpp
+    ${MTMD_DIR}/models/pixtral.cpp
+    ${MTMD_DIR}/models/qwen2vl.cpp
+    ${MTMD_DIR}/models/qwen3vl.cpp
+    ${MTMD_DIR}/models/siglip.cpp
+    ${MTMD_DIR}/models/whisper-enc.cpp
+    ${MTMD_DIR}/models/deepseekocr.cpp
+    ${MTMD_DIR}/models/mobilenetv5.cpp
+    ${MTMD_DIR}/models/youtuvl.cpp
+)
+
 add_library(elysium_native SHARED
     pty_bridge.cpp
     llama_bridge.cpp
+    ${MTMD_SRCS}
 )
 
 target_include_directories(elysium_native PRIVATE
@@ -75,6 +107,7 @@ target_include_directories(elysium_native PRIVATE
     ${LLAMA_CPP_DIR}/ggml/include
     ${LLAMA_CPP_DIR}/common
     ${LLAMA_CPP_DIR}/src
+    ${MTMD_DIR}
     ${CMAKE_SOURCE_DIR}
 )
 

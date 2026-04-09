@@ -44,11 +44,22 @@ class SimpleCommandExecutor(private val scope: CoroutineScope) {
             _output.emit("$ $command\n")
             
             val shell = customShellPath ?: "/system/bin/sh"
-            val processBuilder = ProcessBuilder(shell, "-c", command)
+            val processBuilder = if (shell.contains("busybox")) {
+                ProcessBuilder(shell, "sh", "-c", command)
+            } else {
+                ProcessBuilder(shell, "-c", command)
+            }
             processBuilder.directory(java.io.File(workingDir ?: "/"))
             processBuilder.redirectErrorStream(true)
             
-            val process = processBuilder.start()
+            val process = try {
+                processBuilder.start()
+            } catch (e: Exception) {
+                Log.e(TAG, "Process start failed: ${e.message}")
+                _output.emit("\n[ERROR] Could not start shell: ${e.message}\n")
+                _isExecuting.value = false
+                return@launch
+            }
             
             process.inputStream.bufferedReader().use { reader ->
                 var line: String?

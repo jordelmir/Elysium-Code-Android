@@ -79,6 +79,10 @@ fun EnhancedChatScreen(viewModel: MainViewModel = viewModel()) {
     val currentResponse by viewModel.agentOrchestrator.currentResponse.collectAsState(initial = "")
     val pendingToolCall by viewModel.agentOrchestrator.pendingToolCall.collectAsState(initial = null)
 
+    val pendingImage by viewModel.pendingImageData.collectAsState()
+    val pendingVideo by viewModel.pendingVideoData.collectAsState()
+    val pendingAudio by viewModel.pendingAudioData.collectAsState()
+
     val listState = rememberLazyListState()
 
     // Auto-scroll to bottom on new messages
@@ -137,6 +141,13 @@ fun EnhancedChatScreen(viewModel: MainViewModel = viewModel()) {
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        val stateColor = when (agentState) {
+                            AgentState.IDLE -> Color.Green
+                            AgentState.GENERATING -> Color.Cyan
+                            AgentState.THINKING -> Color(0xFFFFA500)
+                            else -> Color.Red
+                        }
+                        
                         Box(
                             modifier = Modifier
                                 .size(8.dp)
@@ -144,6 +155,7 @@ fun EnhancedChatScreen(viewModel: MainViewModel = viewModel()) {
                                 .background(
                                     when (agentState) {
                                         AgentState.IDLE -> Color(0xFF39FF14)
+                                        AgentState.LOADING -> Color(0xFFFFA500).copy(alpha = statusPulse)
                                         AgentState.THINKING -> Color(0xFF00D4FF).copy(alpha = statusPulse)
                                         AgentState.REFLECTING -> Color(0xFFFF00FF).copy(alpha = statusPulse)
                                         AgentState.GENERATING -> Color(0xFFFFB020).copy(alpha = statusPulse)
@@ -163,6 +175,7 @@ fun EnhancedChatScreen(viewModel: MainViewModel = viewModel()) {
                     Text(
                         when (agentState) {
                             AgentState.IDLE -> "✅ Ready"
+                            AgentState.LOADING -> "⬇️ Loading Model..."
                             AgentState.THINKING -> "🧠 Thinking..."
                             AgentState.REFLECTING -> "🕵️ Reflecting..."
                             AgentState.GENERATING -> "⚡ Generating..."
@@ -175,7 +188,7 @@ fun EnhancedChatScreen(viewModel: MainViewModel = viewModel()) {
                             AgentState.IDLE -> Color(0xFF39FF14)
                             AgentState.ERROR -> Color(0xFFFF3B5C)
                             AgentState.WAITING_FOR_APPROVAL -> Color(0xFF00D4FF)
-                            AgentState.THINKING, AgentState.REFLECTING, AgentState.GENERATING, AgentState.EXECUTING -> Color(0xFFFFB020)
+                            AgentState.LOADING, AgentState.THINKING, AgentState.REFLECTING, AgentState.GENERATING, AgentState.EXECUTING -> Color(0xFFFFB020)
                         }
                     )
                 }
@@ -323,11 +336,38 @@ fun EnhancedChatScreen(viewModel: MainViewModel = viewModel()) {
                 }
             ) {
                 Column {
+                    // Generation Progress Indicator
+                    AnimatedVisibility(visible = agentState == AgentState.GENERATING) {
+                        LinearProgressIndicator(
+                            modifier = Modifier.fillMaxWidth().height(2.dp),
+                            color = Color(0xFF00D4FF),
+                            trackColor = Color.Transparent
+                        )
+                    }
                     Row(modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         IconButton(onClick = { imageLauncher.launch("image/*") }) { Icon(Icons.Outlined.Image, null, tint = Color(0xFF00D4FF), modifier = Modifier.size(20.dp)) }
                         IconButton(onClick = { videoLauncher.launch("video/*") }) { Icon(Icons.Outlined.VideoCall, null, tint = Color(0xFF00D4FF), modifier = Modifier.size(20.dp)) }
                         IconButton(onClick = { audioLauncher.launch("audio/*") }) { Icon(Icons.Outlined.Mic, null, tint = Color(0xFF00D4FF), modifier = Modifier.size(20.dp)) }
                     }
+
+                    // ═══ Attachment Chips ═══
+                    AnimatedVisibility(visible = pendingImage != null || pendingVideo != null || pendingAudio != null) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            pendingImage?.let {
+                                AttachmentChip("📷 Image Attached", Color(0xFF00D4FF)) { viewModel.clearAttachments() }
+                            }
+                            pendingVideo?.let {
+                                AttachmentChip("🎬 Video Attached", Color(0xFFFFB020)) { viewModel.clearAttachments() }
+                            }
+                            pendingAudio?.let {
+                                AttachmentChip("🎵 Audio Attached", Color(0xFF39FF14)) { viewModel.clearAttachments() }
+                            }
+                        }
+                    }
+
                     Row(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         BasicTextField(
                             value = inputText, onValueChange = { inputText = it },
@@ -347,16 +387,17 @@ fun EnhancedChatScreen(viewModel: MainViewModel = viewModel()) {
                         IconButton(
                             onClick = {
                                 val msg = inputText.text.trim()
-                                if (msg.isNotEmpty() && agentState == AgentState.IDLE) {
+                                val hasMedia = pendingImage != null || pendingVideo != null || pendingAudio != null
+                                if ((msg.isNotEmpty() || hasMedia) && agentState == AgentState.IDLE) {
                                     haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                                    viewModel.sendMessage(msg)
+                                    viewModel.sendMessage(msg.ifEmpty { "Analyze this media." })
                                     inputText = TextFieldValue("")
                                 }
                             },
-                            enabled = inputText.text.isNotEmpty() && agentState == AgentState.IDLE,
-                            modifier = Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)).background(if (inputText.text.isNotEmpty() && agentState == AgentState.IDLE) Color(0xFF00D4FF).copy(alpha = 0.2f) else Color.Transparent)
+                            enabled = (inputText.text.isNotEmpty() || pendingImage != null || pendingVideo != null || pendingAudio != null) && agentState == AgentState.IDLE,
+                            modifier = Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)).background(if ((inputText.text.isNotEmpty() || pendingImage != null || pendingVideo != null || pendingAudio != null) && agentState == AgentState.IDLE) Color(0xFF00D4FF).copy(alpha = 0.2f) else Color.Transparent)
                         ) {
-                            Icon(Icons.AutoMirrored.Filled.Send, "Send", tint = if (inputText.text.isNotEmpty() && agentState == AgentState.IDLE) Color(0xFF00D4FF) else Color(0xFF585868))
+                            Icon(Icons.AutoMirrored.Filled.Send, "Send", tint = if ((inputText.text.isNotEmpty() || pendingImage != null || pendingVideo != null || pendingAudio != null) && agentState == AgentState.IDLE) Color(0xFF00D4FF) else Color(0xFF585868))
                         }
                     }
                 }
@@ -380,6 +421,26 @@ fun EnhancedChatScreen(viewModel: MainViewModel = viewModel()) {
             }
         }
     } // End Box
+}
+
+@Composable
+fun AttachmentChip(text: String, color: Color, onClear: () -> Unit) {
+    Surface(
+        color = color.copy(alpha = 0.1f),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.3f))
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(text, style = ElysiumTheme.typography.labelSmall, color = color)
+            IconButton(onClick = onClear, modifier = Modifier.size(16.dp)) {
+                Icon(Icons.Default.Close, null, tint = color, modifier = Modifier.size(12.dp))
+            }
+        }
+    }
 }
 
 @Composable

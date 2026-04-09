@@ -67,16 +67,81 @@ class LlamaEngine {
         repeatPenalty: Float,
         callback: InferenceCallback
     ): String
+    private external fun nativeLoadMmProj(mmprojPath: String): Boolean
+    private external fun nativeInferMultimodal(
+        prompt: String,
+        mediaData: Array<ByteArray>,
+        mediaTypes: IntArray,
+        mediaWidths: IntArray,
+        mediaHeights: IntArray,
+        maxTokens: Int,
+        callback: InferenceCallback
+    ): String
     private external fun nativeCancelInference()
     private external fun nativeIsModelLoaded(): Boolean
     private external fun nativeIsGenerating(): Boolean
     private external fun nativeGetModelInfo(): String
     private external fun nativeUnloadModel()
     private external fun nativeCleanup()
+    private external fun nativeResetState()
     private external fun nativeTokenize(text: String): Int
     private external fun nativeGetContextSize(): Int
 
     // ═══ Public API ═══
+
+    suspend fun loadMmProj(path: String): Boolean = withContext(Dispatchers.IO) {
+        if (!isNativeLibraryLoaded || _state.value == EngineState.UNINITIALIZED) return@withContext false
+        try {
+            val success = nativeLoadMmProj(path)
+            Log.i(TAG, "Multimodal Projector load result: $success (path: $path)")
+            success
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to load mmproj", e)
+            false
+        }
+    }
+
+    suspend fun generateMultimodal(
+        prompt: String,
+        media: List<SerializedMedia>,
+        config: InferenceConfig = InferenceConfig()
+    ): String = withContext(Dispatchers.IO) {
+        if (_state.value != EngineState.READY) {
+            val errorMsg = "Engine not ready. Current state: ${_state.value}. Request deferred or model load failed."
+            Log.w(TAG, errorMsg)
+            throw IllegalStateException(errorMsg)
+        }
+
+        _state.value = EngineState.GENERATING
+        val startTime = System.currentTimeMillis()
+        var tokenCount = 0
+
+        val callback = object : InferenceCallback {
+            override fun onToken(token: String) {
+                tokenCount++
+                _tokenStream.tryEmit(token)
+            }
+            override fun onComplete(result: String) {}
+        }
+
+        try {
+            val result = nativeInferMultimodal(
+                prompt = prompt,
+                mediaData = media.map { it.data }.toTypedArray(),
+                mediaTypes = media.map { if (it.type == "audio") 1 else 0 }.toIntArray(),
+                mediaWidths = media.map { it.width }.toIntArray(),
+                mediaHeights = media.map { it.height }.toIntArray(),
+                maxTokens = config.maxTokens,
+                callback = callback
+            )
+            _state.value = EngineState.READY
+            result
+        } catch (e: Exception) {
+            Log.e(TAG, "Multimodal generation error in state ${_state.value}", e)
+            _state.value = EngineState.ERROR
+            throw e
+        }
+    }
 
     fun initialize() {
         Log.i(TAG, "Initializing LlamaEngine")
@@ -129,7 +194,9 @@ class LlamaEngine {
         config: InferenceConfig = InferenceConfig()
     ): String = withContext(Dispatchers.IO) {
         if (_state.value != EngineState.READY) {
-            throw IllegalStateException("Engine not ready. Current state: ${_state.value}")
+            val errorMsg = "Engine not ready. Current state: ${_state.value}. Request deferred or model load failed."
+            Log.w(TAG, errorMsg)
+            throw IllegalStateException(errorMsg)
         }
 
         _state.value = EngineState.GENERATING
@@ -173,8 +240,28 @@ class LlamaEngine {
     }
 
     fun cancelGeneration() {
+        Log.i(TAG, "Canceling inference")
         nativeCancelInference()
+        // Force reset the state after a small delay to ensure the flag is cleared
+        // even if the native loop didn't catch the signal immediately
+        CoroutineScope(Dispatchers.IO).launch {
+            delay(200)
+            if (nativeIsGenerating()) {
+                Log.w(TAG, "Engine still reporting as generating after cancel, forcing reset")
+                nativeResetState()
+            }
+            _state.value = EngineState.READY
+        }
         inferenceJob?.cancel()
+    }
+
+    /**
+     * Forcibly resets the native engine state. Use this if the UI gets stuck.
+     */
+    fun forceReset() {
+        Log.w(TAG, "Forced engine reset requested")
+        nativeResetState()
+        _state.value = EngineState.READY
     }
 
     fun getModelInfo(): String = nativeGetModelInfo()
@@ -228,6 +315,13 @@ data class InferenceConfig(
     val repeatPenalty: Float = 1.1f,
     val systemPrompt: String = "",
     val stopSequences: List<String> = emptyList()
+)
+
+data class SerializedMedia(
+    val data: ByteArray,
+    val type: String, // "image", "audio", "video"
+    val width: Int = 0,
+    val height: Int = 0
 )
 
 interface InferenceCallback {

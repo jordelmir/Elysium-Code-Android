@@ -108,19 +108,52 @@ fun SettingsScreen(viewModel: com.elysium.code.viewmodel.MainViewModel = android
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column {
-                            StatChip("Size", "2.5 GB")
-                            StatChip("Status", if (viewModel.llamaEngine.isReady()) "LOADED" else "PENDING")
+                            Text("Auto-Migration", style = ElysiumTheme.typography.labelSmall)
+                            Text("Checks internal/external dirs", style = ElysiumTheme.typography.bodySmall, color = ElysiumTheme.colors.textTertiary)
                         }
+                        
+                        val context = androidx.compose.ui.platform.LocalContext.current
+                        val folderPickerLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+                            androidx.activity.result.contract.ActivityResultContracts.OpenDocumentTree()
+                        ) { uri ->
+                            if (uri != null) {
+                                viewModel.importModelFromDirectoryUri(uri)
+                                android.widget.Toast.makeText(context, "Scanning folder for models...", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        }
+
+                        Button(
+                            onClick = { 
+                                folderPickerLauncher.launch(null)
+                            },
+                            colors = ButtonDefaults.filledTonalButtonColors(containerColor = ElysiumTheme.colors.primary.copy(alpha = 0.15f)),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Icon(Icons.Outlined.FolderOpen, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("SELECT FOLDER", style = ElysiumTheme.typography.labelSmall)
+                        }
+                    }
+                    
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
                         Button(
                             onClick = { 
                                 coroutineScope.launch {
+                                    // Trigger a clean re-provision
+                                    viewModel.modelManager.deleteModel()
                                     viewModel.modelManager.extractModelIfNeeded()
                                 }
                             },
-                            colors = ButtonDefaults.buttonColors(containerColor = ElysiumTheme.colors.primary.copy(alpha = 0.2f)),
+                            colors = ButtonDefaults.filledTonalButtonColors(containerColor = ElysiumTheme.colors.accent.copy(alpha = 0.15f)),
                             shape = RoundedCornerShape(8.dp)
                         ) {
-                            Text("PROVISION LOCAL", style = ElysiumTheme.typography.labelSmall, color = ElysiumTheme.colors.primary)
+                            Icon(Icons.Default.Refresh, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("RE-SCAN MODELS", style = ElysiumTheme.typography.labelSmall)
                         }
                     }
                 }

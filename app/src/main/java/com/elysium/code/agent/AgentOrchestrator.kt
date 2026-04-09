@@ -1,8 +1,10 @@
 package com.elysium.code.agent
 
+import android.graphics.BitmapFactory
 import android.util.Log
 import com.elysium.code.ai.InferenceConfig
 import com.elysium.code.ai.LlamaEngine
+import com.elysium.code.ai.MultimodalProcessor
 import com.elysium.code.memory.MemoryEngine
 import com.elysium.code.memory.TaskOutcome
 import com.elysium.code.memory.KnowledgeCategory
@@ -46,6 +48,7 @@ class AgentOrchestrator(
     private val memoryEngine: MemoryEngine,
     private val personalityEngine: PersonalityEngine,
     private val skillsParser: SkillsParser,
+    private val multimodalProcessor: MultimodalProcessor,
     private val scope: CoroutineScope
 ) {
     companion object {
@@ -57,6 +60,10 @@ class AgentOrchestrator(
     // ═══ State ═══
     private val _agentState = MutableStateFlow(AgentState.IDLE)
     val agentState: StateFlow<AgentState> = _agentState.asStateFlow()
+
+    fun updateState(state: AgentState) {
+        _agentState.value = state
+    }
 
     private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
     val messages: StateFlow<List<ChatMessage>> = _messages.asStateFlow()
@@ -95,10 +102,14 @@ class AgentOrchestrator(
         audioData: ByteArray? = null,
         inferenceConfig: InferenceConfig = InferenceConfig()
     ) {
+        currentJob?.cancel()
         currentJob = scope.launch(Dispatchers.IO) {
+            _agentState.value = AgentState.THINKING
+            _currentResponse.value = ""
+            
             try {
-                _agentState.value = AgentState.THINKING
-
+                // Initial prompt processing (ReAct reasoning starts here)
+                val basePrompt = personalityEngine.getActivePersonalityPrompt()
                 // Add user message
                 val userMsg = ChatMessage(
                     role = MessageRole.USER,
@@ -125,20 +136,33 @@ class AgentOrchestrator(
                 val commandsRun = mutableListOf<String>()
                 val filesModified = mutableListOf<String>()
 
+                // Process multimodal data if present
+                val processedImage = imageData?.let { multimodalProcessor.processBitmap(BitmapFactory.decodeByteArray(it, 0, it.size)) }
+                val processedAudio = audioData?.let { /* handled by engine if supported */ null }
+
                 while (iteration < MAX_ITERATIONS && !isComplete && isActive) {
                     iteration++
                     _currentAction.value = "Thinking... (step $iteration)"
 
-                    // Build the full prompt with conversation history
-                    val fullPrompt = buildPrompt(systemPrompt, text, iteration)
+                    // Build the full prompt with conversation history and multimodal tokens
+                    val fullPrompt = multimodalProcessor.buildMultimodalPrompt(
+                        text = if (iteration == 1) text else "Continue task based on tool result.",
+                        images = processedImage?.let { listOf(it) } ?: emptyList(),
+                        audio = null, // processedAudio
+                        systemPrompt = systemPrompt
+                    )
 
                     // Generate response
-                    _agentState.value = AgentState.GENERATING
                     val response = StringBuilder()
+                    var firstTokenReceived = false
 
                     engine.tokenStream.let { flow ->
                         val collectJob = launch {
                             flow.collect { token ->
+                                if (!firstTokenReceived) {
+                                    _agentState.value = AgentState.GENERATING
+                                    firstTokenReceived = true
+                                }
                                 response.append(token)
                                 _currentResponse.value = response.toString()
                                 _streamingText.emit(token)
@@ -452,6 +476,7 @@ class AgentOrchestrator(
 
 enum class AgentState {
     IDLE,
+    LOADING,
     THINKING,
     REFLECTING,
     GENERATING,

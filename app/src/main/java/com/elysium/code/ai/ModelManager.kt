@@ -8,8 +8,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
+import java.util.zip.ZipInputStream
 
 /**
  * ═══════════════════════════════════════════════════════════════
@@ -26,6 +28,8 @@ class ModelManager(private val context: Context) {
     companion object {
         private const val TAG = "ModelManager"
         private const val MODEL_FILENAME = "gemma-4-e4b-it-q4_k_m.gguf"
+        private const val MODEL_ZIP_FILENAME = "gemma-4-e4b-it-q4_k_m.zip"
+        private const val MMPROJ_FILENAME = "mmproj-model-f16.gguf"
         private const val MODELS_DIR = "models"
         private const val ASSET_CHUNK_PREFIX = "model_part_"  // For split assets >150MB
         private const val EXTRACTION_COMPLETE_MARKER = ".extracted"
@@ -37,7 +41,9 @@ class ModelManager(private val context: Context) {
         val sizeBytes: Long = 0,
         val quantization: String = "Q4_K_M",
         val isExtracted: Boolean = false,
-        val path: String = ""
+        val path: String = "",
+        val hasMmProj: Boolean = false,
+        val mmProjPath: String = ""
     )
 
     private val _extractionProgress = MutableStateFlow(0f)
@@ -49,8 +55,11 @@ class ModelManager(private val context: Context) {
     private val modelsDir: File
         get() = File(context.getExternalFilesDir(null), MODELS_DIR).also { it?.mkdirs() }!!
 
-    private val modelFile: File
+    val modelFile: File
         get() = File(modelsDir, MODEL_FILENAME)
+
+    val mmprojFile: File
+        get() = File(modelsDir, MMPROJ_FILENAME)
 
     private val markerFile: File
         get() = File(modelsDir, EXTRACTION_COMPLETE_MARKER)
@@ -63,9 +72,9 @@ class ModelManager(private val context: Context) {
     }
 
     /**
-     * Get the path to the extracted model file
+     * Get the path to the current model file
      */
-    fun getModelPath(): String = modelFile.absolutePath
+    fun getModelPath(): String = _modelInfo.value.path.ifEmpty { modelFile.absolutePath }
 
     /**
      * Extract the model from APK assets to internal storage.
@@ -78,9 +87,7 @@ class ModelManager(private val context: Context) {
      *     with aapt compression. We use noCompress + split for large models)
      */
     suspend fun extractModelIfNeeded(): Boolean = withContext(Dispatchers.IO) {
-        if (isModelReady()) {
-            Log.i(TAG, "Model ready at: ${modelFile.absolutePath}")
-            _extractionProgress.value = 1f
+        if (markerFile.exists()) {
             _modelInfo.value = ModelInfo(
                 isExtracted = true,
                 path = modelFile.absolutePath,
@@ -89,20 +96,132 @@ class ModelManager(private val context: Context) {
             return@withContext true
         }
 
-        // --- NEW: Check for Sideloaded Model first ---
-        val publicDocs = File("/sdcard/Documents/Elysium/models", MODEL_FILENAME)
-        if (publicDocs.exists()) {
-            Log.i(TAG, "Found sideloaded model. Importing...")
-            try {
-                publicDocs.inputStream().use { input ->
-                    FileOutputStream(modelFile).use { output -> input.copyTo(output) }
-                }
-                markerFile.createNewFile()
-                return@withContext true
-            } catch (e: Exception) { Log.e(TAG, "Sideload import failed", e) }
+        // 1. Check if model folder exists
+        if (!modelFile.parentFile.exists()) {
+            modelFile.parentFile.mkdirs()
         }
 
-        Log.i(TAG, "Model not ready. Attempting extraction from assets...")
+        // 2. Magic Discovery: Search common Android directories for the model (including subdirectories)
+        val searchPaths = listOf(
+            "/sdcard/Download",
+            "/sdcard/Documents",
+            context.getExternalFilesDir(null)?.absolutePath ?: ""
+        )
+
+        var foundCandidate: File? = null
+        var isZip = false
+        
+        for (path in searchPaths) {
+            if (path.isBlank()) continue
+            val baseDir = File(path)
+            if (!baseDir.exists() || !baseDir.isDirectory) continue
+            
+            // 2a. Check for raw GGUF
+            val candidate = File(baseDir, MODEL_FILENAME)
+            if (candidate.exists()) {
+                foundCandidate = candidate
+                isZip = false
+                break
+            }
+            
+            // 2b. Check for ZIP
+            val zipCandidate = File(baseDir, MODEL_ZIP_FILENAME)
+            if (zipCandidate.exists()) {
+                foundCandidate = zipCandidate
+                isZip = true
+                break
+            }
+            
+            // check subdirectories
+            val subdirs = baseDir.listFiles { file -> file.isDirectory }
+            if (subdirs != null) {
+                for (subdir in subdirs) {
+                    val subCandidate = File(subdir, MODEL_FILENAME)
+                    if (subCandidate.exists()) {
+                        foundCandidate = subCandidate
+                        isZip = false
+                        break
+                    }
+                    val subZip = File(subdir, MODEL_ZIP_FILENAME)
+                    if (subZip.exists()) {
+                        foundCandidate = subZip
+                        isZip = true
+                        break
+                    }
+                }
+            }
+            if (foundCandidate != null) break
+        }
+
+        if (foundCandidate != null) {
+            val candidate = foundCandidate
+            Log.i(TAG, "Magic Discovery: Found ${if (isZip) "ZIP" else "GGUF"} at ${candidate.absolutePath}. Starting Auto-Migration...")
+            
+            try {
+                if (isZip) {
+                    // Extract from ZIP
+                    FileInputStream(candidate).use { fis ->
+                        ZipInputStream(fis).use { zis ->
+                            var entry = zis.nextEntry
+                            var foundInZip = false
+                            while (entry != null) {
+                                if (entry.name.endsWith(".gguf")) {
+                                    foundInZip = true
+                                    val totalSize = entry.size
+                                    FileOutputStream(modelFile).use { fos ->
+                                        val buffer = ByteArray(1024 * 1024 * 4)
+                                        var totalCopied = 0L
+                                        var bytesRead: Int
+                                        while (zis.read(buffer).also { bytesRead = it } != -1) {
+                                            fos.write(buffer, 0, bytesRead)
+                                            totalCopied += bytesRead
+                                            if (totalSize > 0) {
+                                                _extractionProgress.value = totalCopied.toFloat() / totalSize
+                                            }
+                                        }
+                                        fos.flush()
+                                    }
+                                    break
+                                }
+                                entry = zis.nextEntry
+                            }
+                            if (!foundInZip) throw IOException("Model file not found inside ZIP archive")
+                        }
+                    }
+                } else {
+                    // Standard Copy
+                    candidate.inputStream().use { input ->
+                        FileOutputStream(modelFile).use { output ->
+                            val buffer = ByteArray(1024 * 1024 * 4)
+                            var totalCopied = 0L
+                            val totalSize = candidate.length()
+                            var bytesRead: Int
+                            while (input.read(buffer).also { bytesRead = it } != -1) {
+                                output.write(buffer, 0, bytesRead)
+                                totalCopied += bytesRead
+                                _extractionProgress.value = totalCopied.toFloat() / totalSize
+                            }
+                            output.flush()
+                        }
+                    }
+                }
+                
+                markerFile.createNewFile()
+                Log.i(TAG, "Auto-Migration complete.")
+                
+                _modelInfo.value = ModelInfo(
+                    isExtracted = true,
+                    path = modelFile.absolutePath,
+                    sizeBytes = modelFile.length()
+                )
+                return@withContext true
+            } catch (e: Exception) {
+                Log.e(TAG, "Auto-Migration failed for ${candidate.absolutePath}", e)
+                modelFile.delete()
+            }
+        }
+
+        Log.i(TAG, "Model not found in Docs. Attempting extraction from assets...")
         
         try {
             // Try single file first
@@ -111,6 +230,11 @@ class ModelManager(private val context: Context) {
                 Log.i(TAG, "Found model in assets, extracting to: ${modelFile.absolutePath}")
                 extractSingleFile(assetPath)
                 Log.i(TAG, "Model extraction complete")
+                _modelInfo.value = ModelInfo(
+                    isExtracted = true,
+                    path = modelFile.absolutePath,
+                    sizeBytes = modelFile.length()
+                )
                 return@withContext true
             }
             
@@ -118,6 +242,11 @@ class ModelManager(private val context: Context) {
             Log.i(TAG, "Trying chunked model extraction...")
             extractChunkedModel()
             Log.i(TAG, "Chunked model extraction complete")
+            _modelInfo.value = ModelInfo(
+                isExtracted = true,
+                path = modelFile.absolutePath,
+                sizeBytes = modelFile.length()
+            )
             return@withContext true
         } catch (e: IOException) {
             Log.e(TAG, "Model extraction failed", e)
@@ -159,12 +288,13 @@ class ModelManager(private val context: Context) {
         val chunkDir = MODELS_DIR
         val chunks = mutableListOf<String>()
 
-        // Discover chunks
+        // Discover chunks in assets/models/
         try {
             val files = context.assets.list(chunkDir) ?: emptyArray()
+            // Sorter for aa, ab, ac... suffixes
             chunks.addAll(
                 files.filter { it.startsWith(ASSET_CHUNK_PREFIX) }
-                    .sorted()
+                    .sortedBy { it.substringAfter(ASSET_CHUNK_PREFIX) }
             )
         } catch (e: IOException) {
             Log.e(TAG, "Could not list asset chunks", e)
@@ -172,27 +302,33 @@ class ModelManager(private val context: Context) {
 
         if (chunks.isEmpty()) {
             Log.e(TAG, "No model file or chunks found in assets/$chunkDir/")
-            throw IOException("Model not found in assets. Bundle the GGUF model in assets/$chunkDir/")
+            throw IOException("Model not found in assets. Bundle the GGUF model parts in assets/$chunkDir/")
         }
 
-        Log.i(TAG, "Found ${chunks.size} model chunks")
+        Log.i(TAG, "Reconstructing model from ${chunks.size} chunks...")
+
+        var totalSize = 0L
+        // Roughly estimate or use a hardcoded total size if known
+        // Gemma 4 E4B Q4_K_M is ~4.97 bil bytes
+        val estimatedTotal = 4977164672L 
 
         FileOutputStream(modelFile).use { output ->
             var totalWritten = 0L
             chunks.forEachIndexed { index, chunk ->
                 context.assets.open("$chunkDir/$chunk").use { input ->
-                    val buffer = ByteArray(1024 * 1024)
+                    val buffer = ByteArray(1024 * 1024 * 2) // 2MB faster buffer
                     var bytesRead: Int
                     while (input.read(buffer).also { bytesRead = it } != -1) {
                         output.write(buffer, 0, bytesRead)
                         totalWritten += bytesRead
+                        _extractionProgress.value = totalWritten.toFloat() / estimatedTotal
                     }
                 }
-                _extractionProgress.value = (index + 1).toFloat() / chunks.size
-                Log.i(TAG, "Chunk ${index + 1}/${chunks.size} extracted ($totalWritten bytes total)")
+                Log.i(TAG, "Chunk $chunk ($index/${chunks.size}) reconstructed. Total: $totalWritten")
             }
             output.flush()
         }
+        markerFile.createNewFile()
     }
 
     /**
@@ -211,5 +347,55 @@ class ModelManager(private val context: Context) {
      */
     fun getAvailableStorageBytes(): Long {
         return context.filesDir.usableSpace
+    }
+
+    /**
+     * Get the path to the multimodal projector if it exists
+     */
+    fun getMmprojPath(): String? {
+        if (mmprojFile.exists() && mmprojFile.length() > 0) return mmprojFile.absolutePath
+        return null
+    }
+
+    /**
+     * Magic Discovery for multimodal projector (mmproj) files.
+     * Scans standard directories for any file matching *mmproj* or *projector* patterns.
+     */
+    suspend fun discoverMmProj(): Boolean = withContext(Dispatchers.IO) {
+        if (mmprojFile.exists() && mmprojFile.length() > 0) {
+            Log.i(TAG, "MmProj already in storage: ${mmprojFile.absolutePath}")
+            return@withContext true
+        }
+
+        val searchPaths = listOf(
+            "/sdcard/Documents/Elysium/models",
+            "/sdcard/Download/Elysium/models",
+            "/sdcard/Download",
+            "/sdcard/Documents",
+            context.getExternalFilesDir(null)?.absolutePath ?: ""
+        )
+
+        for (path in searchPaths) {
+            if (path.isBlank()) continue
+            val dir = File(path)
+            if (!dir.exists() || !dir.isDirectory) continue
+
+            dir.listFiles()?.forEach { file ->
+                val name = file.name.lowercase()
+                if (name.contains("mmproj") || name.contains("projector")) {
+                    Log.i(TAG, "Magic Discovery: Found mmproj at ${file.absolutePath}")
+                    try {
+                        file.copyTo(mmprojFile, overwrite = true)
+                        Log.i(TAG, "MmProj migrated to ${mmprojFile.absolutePath}")
+                        return@withContext true
+                    } catch (e: Exception) {
+                        Log.e(TAG, "MmProj migration failed", e)
+                    }
+                }
+            }
+        }
+
+        Log.w(TAG, "No mmproj file found. Multimodal features disabled.")
+        return@withContext false
     }
 }

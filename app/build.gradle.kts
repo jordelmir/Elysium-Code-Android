@@ -151,6 +151,9 @@ dependencies {
     // Splash Screen
     implementation("androidx.core:core-splashscreen:1.0.1")
     
+    // Document Tree Support (Folder Picker)
+    implementation("androidx.documentfile:documentfile:1.0.1")
+    
     // Debug
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")

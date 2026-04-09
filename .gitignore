@@ -25,6 +25,7 @@ sync_out.txt
 
 # Large Assets (Weights & Blobs)
 models/
+app/src/main/assets/models/
 data.tar.xz
 tmp_extract/
 busybox_test

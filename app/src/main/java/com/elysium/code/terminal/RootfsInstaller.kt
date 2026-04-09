@@ -49,10 +49,12 @@ object RootfsInstaller {
                     busyboxFile.outputStream().use { output -> input.copyTo(output) }
                 }
                 busyboxFile.setExecutable(true)
+                // We keep the --install but we won't strictly rely on it for the main entry point
                 ProcessBuilder(busyboxFile.absolutePath, "--install", "-s", binDir.absolutePath)
                     .start().waitFor()
             }
-            return@withContext File(binDir, "ash").absolutePath
+            // Return root busybox path. We will use it with "ash" argument.
+            return@withContext busyboxFile.absolutePath
         } catch (e: Exception) {
             Log.e(TAG, "Busybox setup failed", e)
             null
@@ -131,10 +133,26 @@ object RootfsInstaller {
     fun createStaffShellWrapper(context: Context, proot: String, rootfs: String): String {
         val binDir = File(context.filesDir, "bin")
         val wrapper = File(binDir, "staff-shell")
+        
+        // Ensure home directory exists in the guest
+        val homeDir = File(rootfs, "home/elysium")
+        if (!homeDir.exists()) homeDir.mkdirs()
+
         wrapper.writeText("""
             #!/system/bin/sh
             export PROOT_SKIP_LDPRELOAD=1
-            exec $proot --link2symlink -0 -r $rootfs -b /dev -b /proc -b /sys -b /sdcard -b ${context.filesDir.absolutePath}:/home/elysium -w /root /usr/bin/env -i HOME=/root TERM=xterm-256color PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin /bin/bash
+            export HOME=/home/elysium
+            # Universal Bindings: /sdcard, /tmp, /dev, /proc, /sys
+            exec $proot --link2symlink -0 -r $rootfs \
+                -b /dev -b /proc -b /sys \
+                -b /sdcard -b /storage \
+                -b ${context.filesDir.absolutePath}:/home/elysium/internal \
+                -w /home/elysium \
+                /usr/bin/env -i \
+                HOME=/home/elysium \
+                TERM=xterm-256color \
+                PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+                /bin/bash
         """.trimIndent())
         wrapper.setExecutable(true)
         return wrapper.absolutePath

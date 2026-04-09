@@ -244,7 +244,9 @@ fun EnhancedTerminalScreen(viewModel: MainViewModel = viewModel()) {
                     .padding(horizontal = 4.dp, vertical = 2.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                val specialKeys = listOf("ESC", "TAB", "CTRL", "ALT", "{", "}", "[", "]", "/", "|", "-", "_")
+                val specialKeys = listOf(
+                    "ESC", "TAB", "CTRL", "ALT", "|", "/", "\\", "—", "_", "!", "@", "#", "$", "%", "^", "&", "*", "(", ")", "{", "}", "[", "]", "<", ">", "?", "!", ":", ";", "\"", "'", ",", "."
+                )
                 specialKeys.forEach { key ->
                     Surface(
                         onClick = {
