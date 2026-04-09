@@ -32,6 +32,9 @@ class SimpleCommandExecutor(private val scope: CoroutineScope) {
     private val _lastExitCode = MutableStateFlow<Int?>(null)
     val lastExitCode: StateFlow<Int?> = _lastExitCode.asStateFlow()
 
+    var customShellPath: String? = null
+    var workingDir: String? = null
+
     /**
      * Execute a command and stream output
      */
@@ -40,8 +43,9 @@ class SimpleCommandExecutor(private val scope: CoroutineScope) {
             _isExecuting.value = true
             _output.emit("$ $command\n")
             
-            val processBuilder = ProcessBuilder("/bin/sh", "-c", command)
-            processBuilder.directory(java.io.File("/data/data/com.elysium.code.debug/files"))
+            val shell = customShellPath ?: "/system/bin/sh"
+            val processBuilder = ProcessBuilder(shell, "-c", command)
+            processBuilder.directory(java.io.File(workingDir ?: "/"))
             processBuilder.redirectErrorStream(true)
             
             val process = processBuilder.start()
@@ -74,8 +78,9 @@ class SimpleCommandExecutor(private val scope: CoroutineScope) {
      */
     suspend fun executeAndCapture(command: String): String = withContext(Dispatchers.IO) {
         return@withContext try {
-            val processBuilder = ProcessBuilder("/bin/sh", "-c", command)
-            processBuilder.directory(java.io.File("/data/data/com.elysium.code.debug/files"))
+            val shell = customShellPath ?: "/system/bin/sh"
+            val processBuilder = ProcessBuilder(shell, "-c", command)
+            processBuilder.directory(java.io.File(workingDir ?: "/"))
             processBuilder.redirectErrorStream(true)
             
             val process = processBuilder.start()
@@ -163,6 +168,14 @@ class EnhancedShellManager(private val scope: CoroutineScope) {
      */
     fun clearHistory() {
         _commandHistory.value = emptyList()
+    }
+
+    /**
+     * Set dynamic execution environment
+     */
+    fun setEnvironment(shellPath: String?, workDir: String?) {
+        commandExecutor.customShellPath = shellPath
+        commandExecutor.workingDir = workDir
     }
 
     /**

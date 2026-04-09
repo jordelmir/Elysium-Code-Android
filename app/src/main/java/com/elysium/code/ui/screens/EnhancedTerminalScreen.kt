@@ -47,6 +47,8 @@ import kotlinx.coroutines.launch
 @Composable
 fun EnhancedTerminalScreen(viewModel: MainViewModel = viewModel()) {
     val scope = rememberCoroutineScope()
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
 
     var inputText by remember { mutableStateOf(TextFieldValue("")) }
     val terminalOutput by viewModel.enhancedShellManager.terminalOutput.collectAsState()
@@ -292,6 +294,7 @@ fun EnhancedTerminalScreen(viewModel: MainViewModel = viewModel()) {
                 IconButton(
                     onClick = {
                         if (commandHistory.isNotEmpty()) {
+                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                             historyIndex = (historyIndex + 1).coerceAtMost(commandHistory.size - 1)
                             val cmd = commandHistory.reversed().getOrNull(historyIndex)
                             if (cmd != null) inputText = TextFieldValue(cmd)

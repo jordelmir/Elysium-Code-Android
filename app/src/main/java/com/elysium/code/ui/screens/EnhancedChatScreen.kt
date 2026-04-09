@@ -32,6 +32,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.elysium.code.agent.AgentState
 import com.elysium.code.agent.ChatMessage
@@ -84,6 +90,9 @@ fun EnhancedChatScreen(viewModel: MainViewModel = viewModel()) {
         ),
         label = "statusPulse"
     )
+
+    val clipboardManager = LocalClipboardManager.current
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -249,23 +258,42 @@ fun EnhancedChatScreen(viewModel: MainViewModel = viewModel()) {
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
                             // Role label
-                            if (!isUser) {
-                                Text(
-                                    when {
-                                        isTool -> "🔧 ${message.toolName ?: "Tool"}"
-                                        isSystem -> "⚠️ System"
-                                        else -> "🤖 Elysium"
-                                    },
-                                    style = ElysiumTheme.typography.labelSmall,
-                                    color = when {
-                                        isTool -> Color(0xFF39FF14)
-                                        isSystem -> Color(0xFFFF3B5C)
-                                        else -> Color(0xFF00D4FF)
-                                    },
-                                    fontWeight = FontWeight.Bold
-                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        when {
+                                            isTool -> "🔧 ${message.toolName ?: "Tool"}"
+                                            isSystem -> "⚠️ System"
+                                            else -> "🤖 Elysium"
+                                        },
+                                        style = ElysiumTheme.typography.labelSmall,
+                                        color = when {
+                                            isTool -> Color(0xFF39FF14)
+                                            isSystem -> Color(0xFFFF3B5C)
+                                            else -> Color(0xFF00D4FF)
+                                        },
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    
+                                    IconButton(
+                                        onClick = { 
+                                            clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(message.content))
+                                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                        },
+                                        modifier = Modifier.size(24.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.ContentCopy,
+                                            null,
+                                            tint = Color(0xFF585868),
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                }
                                 Spacer(Modifier.height(4.dp))
-                            }
 
                             Text(
                                 message.content,
@@ -428,6 +456,7 @@ fun EnhancedChatScreen(viewModel: MainViewModel = viewModel()) {
                     onClick = {
                         val message = inputText.text.trim()
                         if (message.isNotEmpty() && agentState == AgentState.IDLE) {
+                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
                             viewModel.sendMessage(message)
                             inputText = TextFieldValue("")
                         }
@@ -454,13 +483,13 @@ fun EnhancedChatScreen(viewModel: MainViewModel = viewModel()) {
         }
     }
         
-    // ═══ Intent Approval Overlay ═══
-        AnimatedVisibility(
-            visible = agentState == AgentState.WAITING_FOR_APPROVAL && pendingToolCall != null,
-            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
-            modifier = Modifier.align(Alignment.BottomCenter)
-        ) {
+    // ═══ Intent Approval Overlay (Staff-Level Center Alignment) ═══
+    AnimatedVisibility(
+        visible = agentState == AgentState.WAITING_FOR_APPROVAL && pendingToolCall != null,
+        enter = scaleIn(animationSpec = tween(300)) + fadeIn(),
+        exit = scaleOut(animationSpec = tween(300)) + fadeOut(),
+        modifier = Modifier.align(Alignment.Center)
+    ) {
             pendingToolCall?.let { tool ->
                 IntentApprovalCard(
                     toolName = tool.name,

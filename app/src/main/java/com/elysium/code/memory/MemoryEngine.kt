@@ -99,6 +99,26 @@ class MemoryEngine(private val context: Context) {
         Log.i(TAG, "MemoryEngine initialized: ${_stats.value}")
     }
 
+    /**
+     * Staff Level Maintenance: Clears all historical memory and resets to default knowledge.
+     */
+    suspend fun clearAll() = withContext(Dispatchers.IO) {
+        _knowledgeItems.value = InitialKnowledge.getDefaultKnowledge()
+        _taskPatterns.value = emptyList()
+        _userPreferences.value = UserPreferences()
+        _errorSolutions.value = emptyList()
+        _projectKnowledge.value = emptyList()
+
+        saveList(KNOWLEDGE_FILE, _knowledgeItems.value)
+        saveList(TASKS_FILE, _taskPatterns.value)
+        saveObject(PREFS_FILE, _userPreferences.value)
+        saveList(ERRORS_FILE, _errorSolutions.value)
+        saveList(PROJECTS_FILE, _projectKnowledge.value)
+
+        updateStats()
+        Log.i(TAG, "Memory successfully cleared.")
+    }
+
     // ═══════════════════════════════════════════════════════════
     // KNOWLEDGE RECORDING
     // ═══════════════════════════════════════════════════════════

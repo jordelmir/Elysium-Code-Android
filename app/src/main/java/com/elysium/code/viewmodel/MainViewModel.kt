@@ -196,9 +196,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 toolExecutor.prootPath = prootPath
                 toolExecutor.rootfsDir = rootfsPath
                 
-                // Also update the interactive terminal path
                 if (prootPath != null) {
-                    customShellPath = RootfsInstaller.createStaffShellWrapper(getApplication(), prootPath, rootfsPath)
+                    val wrapperPath = RootfsInstaller.createStaffShellWrapper(getApplication(), prootPath, rootfsPath)
+                    customShellPath = wrapperPath
+                    enhancedShellManager.setEnvironment(wrapperPath, getApplication<Application>().filesDir.absolutePath)
                 }
             }
 
@@ -264,6 +265,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun sendTerminalCommand(command: String) {
         shellManager.sendCommand(command)
+    }
+
+    /**
+     * Staff Level Maintenance: Completely wipes the agent's knowledge and learned history.
+     */
+    fun clearAgentMemory() {
+        viewModelScope.launch {
+            memoryEngine.clearAll()
+        }
+    }
+
+    /**
+     * Swaps the agent's persona and communicative directives instantly.
+     */
+    fun updateAgentPersonality(personalityId: String) {
+        personalityEngine.setActive(personalityId)
     }
 
     override fun onCleared() {

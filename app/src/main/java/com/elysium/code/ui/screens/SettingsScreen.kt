@@ -36,8 +36,10 @@ import com.elysium.code.ui.theme.ElysiumTheme
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen() {
-    var selectedPersonality by remember { mutableStateOf("architect") }
+fun SettingsScreen(viewModel: com.elysium.code.viewmodel.MainViewModel = androidx.lifecycle.viewmodel.compose.viewModel()) {
+    val activePersonality by viewModel.personalityEngine.activePersonality.collectAsState()
+    var selectedPersonalityId by remember(activePersonality) { mutableStateOf(activePersonality?.id ?: "architect") }
+    val stats by viewModel.memoryEngine.stats.collectAsState()
 
     LazyColumn(
         modifier = Modifier
@@ -116,7 +118,10 @@ fun SettingsScreen() {
             SectionHeader("Personality", Icons.Outlined.Face)
         }
         item {
-            PersonalitySelector(selectedPersonality) { selectedPersonality = it }
+            PersonalitySelector(selectedPersonalityId) { 
+                selectedPersonalityId = it
+                viewModel.updateAgentPersonality(it)
+            }
         }
 
         // ═══ Memory ═══
@@ -125,13 +130,15 @@ fun SettingsScreen() {
         }
         item {
             SettingsCard {
-                SettingsRow(Icons.Outlined.Storage, "Knowledge Items", "0 recorded", ElysiumTheme.colors.accent) {}
+                SettingsRow(Icons.Outlined.Storage, "Knowledge Items", "${stats.totalKnowledge} recorded", ElysiumTheme.colors.accent) {}
                 HorizontalDivider(color = ElysiumTheme.colors.divider)
-                SettingsRow(Icons.Outlined.AccountTree, "Task Patterns", "0 learned", ElysiumTheme.colors.primary) {}
+                SettingsRow(Icons.Outlined.AccountTree, "Task Patterns", "${stats.totalTaskPatterns} learned", ElysiumTheme.colors.primary) {}
                 HorizontalDivider(color = ElysiumTheme.colors.divider)
-                SettingsRow(Icons.Outlined.BugReport, "Error Solutions", "0 cataloged", ElysiumTheme.colors.error) {}
+                SettingsRow(Icons.Outlined.BugReport, "Error Solutions", "${stats.totalErrorSolutions} cataloged", ElysiumTheme.colors.error) {}
                 HorizontalDivider(color = ElysiumTheme.colors.divider)
-                SettingsRow(Icons.Outlined.Delete, "Clear All Memory", "Reset agent knowledge", ElysiumTheme.colors.textTertiary) {}
+                SettingsRow(Icons.Outlined.Delete, "Clear All Memory", "Reset agent knowledge", ElysiumTheme.colors.textTertiary) {
+                    viewModel.clearAgentMemory()
+                }
             }
         }
 

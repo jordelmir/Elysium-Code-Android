@@ -203,7 +203,7 @@ fun ElysiumNavHost(viewModel: com.elysium.code.viewmodel.MainViewModel) {
             exitTransition = { fadeOut(animationSpec = tween(300)) }
         ) {
             composable(Screen.Terminal.route) {
-                TerminalScreen(viewModel = viewModel)
+                EnhancedTerminalScreen(viewModel = viewModel)
             }
             composable(Screen.Editor.route) {
                 EnhancedEditorScreen()
