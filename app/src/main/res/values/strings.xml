@@ -1,0 +1,52 @@
+<resources>
+    <string name="app_name">Elysium Code</string>
+    <string name="app_subtitle">Local AI • Terminal • Editor</string>
+    
+    <!-- Navigation -->
+    <string name="nav_terminal">Terminal</string>
+    <string name="nav_editor">Editor</string>
+    <string name="nav_chat">AI Chat</string>
+    <string name="nav_settings">Settings</string>
+    
+    <!-- AI Engine -->
+    <string name="model_loading">Loading AI Model…</string>
+    <string name="model_ready">Model Ready</string>
+    <string name="model_error">Error loading model</string>
+    <string name="inference_running">Generating…</string>
+    <string name="download_model">Download Model</string>
+    <string name="model_name_e4b">Gemma 4 E4B</string>
+    <string name="model_size">~4.5 GB</string>
+    
+    <!-- Terminal -->
+    <string name="new_session">New Session</string>
+    <string name="close_session">Close Session</string>
+    <string name="session_name">Session %d</string>
+    
+    <!-- Editor -->
+    <string name="open_file">Open File</string>
+    <string name="save_file">Save File</string>
+    <string name="new_file">New File</string>
+    <string name="no_file_open">No file open</string>
+    
+    <!-- Chat -->
+    <string name="type_message">Ask Elysium anything…</string>
+    <string name="attach_image">Attach Image</string>
+    <string name="record_audio">Record Audio</string>
+    <string name="capture_video">Capture Video</string>
+    
+    <!-- Settings -->
+    <string name="settings_model">Model Management</string>
+    <string name="settings_personality">Personality</string>
+    <string name="settings_skills">Skills</string>
+    <string name="settings_mcp">MCP Servers</string>
+    <string name="settings_plugins">Plugins</string>
+    <string name="settings_theme">Theme</string>
+    <string name="settings_about">About</string>
+    
+    <!-- Personalities -->
+    <string name="personality_architect">Architect</string>
+    <string name="personality_debugger">Debugger</string>
+    <string name="personality_mentor">Mentor</string>
+    <string name="personality_speed_coder">Speed Coder</string>
+    <string name="personality_auditor">Security Auditor</string>
+</resources>

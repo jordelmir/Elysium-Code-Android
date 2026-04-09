@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Elysium Code adaptive launcher icon: Cyan "E" on dark background -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    
+    <!-- Background: Deep black -->
+    <path
+        android:fillColor="#000000"
+        android:pathData="M0,0h108v108H0z" />
+    
+    <!-- Subtle grid pattern -->
+    <path
+        android:fillColor="#0A0A20"
+        android:pathData="M0,27h108v1H0zM0,54h108v1H0zM0,81h108v1H0zM27,0h1v108H27zM54,0h1v108H54zM81,0h1v108H81z" />
+    
+    <!-- Outer glow ring -->
+    <path
+        android:fillColor="#00D4FF"
+        android:fillAlpha="0.15"
+        android:pathData="M54,20 A34,34,0,1,1,53.99,20 Z"
+        android:strokeColor="#00D4FF"
+        android:strokeAlpha="0.3"
+        android:strokeWidth="1" />
+    
+    <!-- Inner boundary -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#00D4FF"
+        android:strokeAlpha="0.5"
+        android:strokeWidth="1.5"
+        android:pathData="M54,26 A28,28,0,1,1,53.99,26 Z" />
+    
+    <!-- Letter "E" - main body -->
+    <path
+        android:fillColor="#00D4FF"
+        android:pathData="M38,38 L38,70 L66,70 L66,64 L46,64 L46,57 L62,57 L62,51 L46,51 L46,44 L66,44 L66,38 Z" />
+
+    <!-- Decorative corner brackets -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#39FF14"
+        android:strokeAlpha="0.6"
+        android:strokeWidth="1.5"
+        android:pathData="M18,18 L28,18 M18,18 L18,28" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#39FF14"
+        android:strokeAlpha="0.6"
+        android:strokeWidth="1.5"
+        android:pathData="M90,18 L80,18 M90,18 L90,28" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#39FF14"
+        android:strokeAlpha="0.6"
+        android:strokeWidth="1.5"
+        android:pathData="M18,90 L28,90 M18,90 L18,80" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#39FF14"
+        android:strokeAlpha="0.6"
+        android:strokeWidth="1.5"
+        android:pathData="M90,90 L80,90 M90,90 L90,80" />
+</vector>

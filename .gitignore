@@ -1,0 +1,38 @@
+# Android Build Artifacts
+build/
+.gradle/
+app/build/
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aar
+*.jks
+*.keystore
+
+# IDE Config
+.idea/
+*.iml
+.DS_Store
+
+# Local Config
+local.properties
+.env
+ElysiumLogs.txt
+app_logs.txt
+logcat_*.txt
+sync_out.txt
+
+# Large Assets (Weights & Blobs)
+models/
+data.tar.xz
+tmp_extract/
+busybox_test
+proot.deb
+proot_aarch64
+proot_andronix
+proot_gitlab
+
+# OS Files
+.DS_Store
+Thumbs.db
