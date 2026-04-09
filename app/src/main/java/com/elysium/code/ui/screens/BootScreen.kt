@@ -235,6 +235,18 @@ fun BootScreen(
                 color = Color(0xFF7C3AED).copy(alpha = 0.7f)
             )
 
+            if (phase == "BOOTSTRAPPING_LINUX") {
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = "STAFF LEVEL SYSTEM ACCESS • PROOT GAIN",
+                    style = ElysiumTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFFF3B5C),
+                        letterSpacing = 2.sp
+                    )
+                )
+            }
+
             Spacer(Modifier.height(80.dp))
 
             // Progress bar with neon glow

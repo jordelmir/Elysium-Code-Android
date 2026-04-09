@@ -27,6 +27,13 @@ class MainActivity : ComponentActivity() {
                 val bootPhase by viewModel.bootPhase.collectAsState()
                 val bootMessage by viewModel.bootMessage.collectAsState()
                 val bootProgress by viewModel.bootProgress.collectAsState()
+                val linuxProgress by viewModel.linuxSetupProgress.collectAsState()
+                
+                val currentProgress = if (bootPhase == MainViewModel.BootPhase.BOOTSTRAPPING_LINUX) {
+                    linuxProgress
+                } else {
+                    bootProgress
+                }
 
                 Surface(
                     modifier = Modifier.fillMaxSize(),
@@ -46,7 +53,7 @@ class MainActivity : ComponentActivity() {
                             BootScreen(
                                 phase = bootPhase.name,
                                 message = bootMessage,
-                                progress = bootProgress
+                                progress = currentProgress
                             )
                         }
                     }

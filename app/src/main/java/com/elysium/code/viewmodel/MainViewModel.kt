@@ -55,6 +55,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         LOADING_MODEL,
         LOADING_MEMORY,
         LOADING_PLUGINS,
+        BOOTSTRAPPING_LINUX,
         READY,
         ERROR
     }
@@ -67,6 +68,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _bootProgress = MutableStateFlow(0f)
     val bootProgress: StateFlow<Float> = _bootProgress.asStateFlow()
+    
+    private val _linuxSetupProgress = MutableStateFlow(0f)
+    val linuxSetupProgress: StateFlow<Float> = _linuxSetupProgress.asStateFlow()
 
     // ═══ Core Engines ═══
     val llamaEngine = LlamaEngine()
@@ -173,7 +177,32 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             mcpClient.initialize()
             _bootProgress.value = 0.95f
 
-            // Phase 6: Create agent orchestrator
+            // Phase 6: Universal Linux Bootstrap (PRoot + Ubuntu)
+            _bootPhase.value = BootPhase.BOOTSTRAPPING_LINUX
+            _bootMessage.value = "Bootstrapping Linux Environment (Staff Level)..."
+            
+            val busyboxPath = RootfsInstaller.setupBusybox(getApplication())
+            val prootPath = RootfsInstaller.setupProot(getApplication())
+            
+            val rootfsPath = RootfsInstaller.setupUbuntu(getApplication()) { progress ->
+                _linuxSetupProgress.value = progress
+                _bootMessage.value = "Downloading Linux Rootfs: ${(progress * 100).toInt()}%"
+            }
+
+            if (rootfsPath == null) {
+                Log.w(TAG, "Linux bootstrap failed, falling back to Busybox-only mode.")
+            } else {
+                // Staff Level Gain: Configure ToolExecutor to use the PRoot jail by default
+                toolExecutor.prootPath = prootPath
+                toolExecutor.rootfsDir = rootfsPath
+                
+                // Also update the interactive terminal path
+                if (prootPath != null) {
+                    customShellPath = RootfsInstaller.createStaffShellWrapper(getApplication(), prootPath, rootfsPath)
+                }
+            }
+
+            // Phase 7: Create agent orchestrator
             agentOrchestrator = AgentOrchestrator(
                 engine = llamaEngine,
                 toolRegistry = toolRegistry,

@@ -180,7 +180,9 @@ data class ToolDefinition(
  * Executes tool calls safely with proper sandboxing
  */
 class ToolExecutor(
-    private val workingDir: String = "/data/data/com.elysium.code/files/home"
+    private val workingDir: String = "/data/data/com.elysium.code/files/home",
+    var prootPath: String? = null,
+    var rootfsDir: String? = null
 ) {
     companion object {
         private const val TAG = "ToolExecutor"
@@ -227,7 +229,15 @@ class ToolExecutor(
 
         Log.i(TAG, "Executing command: $command")
 
-        val process = ProcessBuilder("sh", "-c", command)
+        val finalCommand = if (prootPath != null && rootfsDir != null) {
+            // Staff Level PRoot Jailing
+            // We use -0 to simulate root, and bind system nodes
+            "$prootPath -0 -r $rootfsDir -b /dev -b /proc -b /sys -w /root /usr/bin/env -i HOME=/root TERM=x86-64 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin /bin/bash -c \"$command\""
+        } else {
+            command
+        }
+
+        val process = ProcessBuilder("sh", "-c", finalCommand)
             .directory(File(workingDir))
             .redirectErrorStream(true)
             .start()
