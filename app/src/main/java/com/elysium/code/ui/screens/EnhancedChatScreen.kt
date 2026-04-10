@@ -273,7 +273,7 @@ fun EnhancedChatScreen(viewModel: MainViewModel = viewModel()) {
                                             isTool -> Color(0xFF39FF14)
                                             isSystem -> Color(0xFFFF3B5C)
                                             else -> Color(0xFF00D4FF)
-                                        },
+                                         },
                                         fontWeight = FontWeight.Bold
                                     )
                                     IconButton(
@@ -287,32 +287,64 @@ fun EnhancedChatScreen(viewModel: MainViewModel = viewModel()) {
                                     }
                                 }
                                 Spacer(Modifier.height(4.dp))
-                                Text(
-                                    message.content,
-                                    style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp, lineHeight = 18.sp),
-                                    color = when {
-                                        isUser -> Color(0xFFE8E8F0)
-                                        isTool -> Color(0xFF39FF14).copy(alpha = 0.9f)
-                                        isSystem -> Color(0xFFFF3B5C).copy(alpha = 0.9f)
-                                        else -> Color(0xFF00D4FF).copy(alpha = 0.95f)
+                                
+                                val content = message.content
+                                if (content.contains("<think>")) {
+                                    val parts = content.split("<think>", "</think>")
+                                    parts.forEachIndexed { index, part ->
+                                        if (index % 2 != 0) { // Inside thinking tags
+                                            ReasoningBlock(part.trim())
+                                        } else if (part.isNotBlank()) {
+                                            Text(
+                                                part.trim(),
+                                                style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp, lineHeight = 18.sp),
+                                                color = if (isUser) Color(0xFFE8E8F0) else Color(0xFF00D4FF).copy(alpha = 0.95f)
+                                            )
+                                        }
                                     }
-                                )
+                                } else {
+                                    Text(
+                                        content,
+                                        style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp, lineHeight = 18.sp),
+                                        color = when {
+                                            isUser -> Color(0xFFE8E8F0)
+                                            isTool -> Color(0xFF39FF14).copy(alpha = 0.9f)
+                                            isSystem -> Color(0xFFFF3B5C).copy(alpha = 0.9f)
+                                            else -> Color(0xFF00D4FF).copy(alpha = 0.95f)
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
                 }
 
-                if (agentState == AgentState.GENERATING && currentResponse.isNotEmpty()) {
-                    item {
-                        Surface(
-                            color = Color(0xFF00D4FF).copy(alpha = 0.08f),
-                            shape = RoundedCornerShape(12.dp, 12.dp, 12.dp, 4.dp),
-                            modifier = Modifier.fillMaxWidth(0.88f).border(1.dp, Color(0xFF00D4FF).copy(alpha = 0.3f), RoundedCornerShape(12.dp, 12.dp, 12.dp, 4.dp))
-                        ) {
-                            Column(modifier = Modifier.padding(12.dp)) {
-                                Text("🤖 Elysium ⚡", style = ElysiumTheme.typography.labelSmall, color = Color(0xFF00D4FF), fontWeight = FontWeight.Bold)
-                                Spacer(Modifier.height(4.dp))
-                                Text(currentResponse + "▌", style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp, lineHeight = 18.sp), color = Color(0xFF00D4FF).copy(alpha = 0.95f))
+                if (agentState == AgentState.GENERATING || agentState == AgentState.THINKING) {
+                    if (currentResponse.isNotEmpty()) {
+                        item {
+                            Surface(
+                                color = Color(0xFF00D4FF).copy(alpha = 0.08f),
+                                shape = RoundedCornerShape(12.dp, 12.dp, 12.dp, 4.dp),
+                                modifier = Modifier.fillMaxWidth(0.88f).border(1.dp, Color(0xFF00D4FF).copy(alpha = 0.3f), RoundedCornerShape(12.dp, 12.dp, 12.dp, 4.dp))
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Text("🤖 Elysium ⚡", style = ElysiumTheme.typography.labelSmall, color = Color(0xFF00D4FF), fontWeight = FontWeight.Bold)
+                                    Spacer(Modifier.height(4.dp))
+                                    
+                                    val content = currentResponse
+                                    if (content.contains("<think>")) {
+                                        val parts = content.split("<think>", "</think>")
+                                        parts.forEachIndexed { index, part ->
+                                          if (index % 2 != 0) {
+                                              ReasoningBlock(part.trim())
+                                          } else if (part.isNotBlank() || (index == parts.lastIndex && !content.endsWith("</think>"))) {
+                                              Text(part.trim() + if (index == parts.lastIndex) " ▌" else "", style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp, lineHeight = 18.sp), color = Color(0xFF00D4FF).copy(alpha = 0.95f))
+                                          }
+                                        }
+                                    } else {
+                                        Text(content + "▌", style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp, lineHeight = 18.sp), color = Color(0xFF00D4FF).copy(alpha = 0.95f))
+                                    }
+                                }
                             }
                         }
                     }
@@ -421,6 +453,35 @@ fun EnhancedChatScreen(viewModel: MainViewModel = viewModel()) {
             }
         }
     } // End Box
+}
+
+@Composable
+fun ReasoningBlock(thought: String) {
+    Surface(
+        color = Color.White.copy(alpha = 0.05f),
+        shape = RoundedCornerShape(8.dp),
+        border = BorderStroke(0.5.dp, Color(0xFF00D4FF).copy(alpha = 0.15f)),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+    ) {
+        Column(modifier = Modifier.padding(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Psychology, null, tint = Color(0xFF00D4FF).copy(alpha = 0.6f), modifier = Modifier.size(14.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("REASONING", style = ElysiumTheme.typography.labelSmall, color = Color(0xFF00D4FF).copy(alpha = 0.6f), fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp)
+            }
+            Spacer(Modifier.height(4.dp))
+            Text(
+                thought,
+                style = TextStyle(
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 12.sp,
+                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                    lineHeight = 16.sp
+                ),
+                color = Color(0xFFE8E8F0).copy(alpha = 0.7f)
+            )
+        }
+    }
 }
 
 @Composable

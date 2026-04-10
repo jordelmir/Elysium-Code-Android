@@ -21,6 +21,7 @@ import com.elysium.code.plugins.SkillsParser
 import com.elysium.code.terminal.ShellManager
 import com.elysium.code.terminal.EnhancedShellManager
 import com.elysium.code.terminal.RootfsInstaller
+import com.elysium.code.terminal.AdbBridgeManager
 import io.ktor.client.*
 import io.ktor.client.engine.okhttp.*
 import kotlinx.coroutines.Dispatchers
@@ -85,8 +86,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val pluginLoader = PluginLoader(application)
     val conversationManager = ConversationManager(application)
     val mcpClient = McpClient(application, HttpClient(OkHttp))
+    val adbBridgeManager = AdbBridgeManager(application)
     val toolRegistry = ToolRegistry()
-    val toolExecutor = ToolExecutor()
+    val toolExecutor = ToolExecutor(adbBridgeManager = adbBridgeManager)
 
     // ═══ Enhanced Components ═══
     val enhancedShellManager = EnhancedShellManager(viewModelScope)
@@ -126,6 +128,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             // Initialize Orchestrator EARLIER so we can track LOADING state
             agentOrchestrator = AgentOrchestrator(
                 engine = llamaEngine,
+                modelManager = modelManager,
                 toolRegistry = toolRegistry,
                 toolExecutor = toolExecutor,
                 memoryEngine = memoryEngine,
@@ -244,6 +247,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (!::agentOrchestrator.isInitialized) {
                 agentOrchestrator = AgentOrchestrator(
                     engine = llamaEngine,
+                    modelManager = modelManager,
                     toolRegistry = toolRegistry,
                     toolExecutor = toolExecutor,
                     memoryEngine = memoryEngine,

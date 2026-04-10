@@ -5,6 +5,7 @@ import kotlinx.serialization.json.*
 import java.io.File
 import java.io.BufferedReader
 import java.io.InputStreamReader
+import com.elysium.code.terminal.AdbBridgeManager
 import java.util.concurrent.TimeUnit
 
 /**
@@ -146,6 +147,32 @@ class ToolRegistry {
                 "manager" to "(Optional) Package manager: apt, pip, npm, etc."
             )
         ))
+
+        register(ToolDefinition(
+            name = "adb_command",
+            description = "Run an ADB (Android Debug Bridge) command. Allows system interactions.",
+            parameters = mapOf(
+                "command" to "The adb command to run (e.g., 'shell getprop', 'install app.apk')",
+                "host" to "(Optional) Remote ADB host, default localhost",
+                "port" to "(Optional) ADB port, default 5555"
+            )
+        ))
+
+        register(ToolDefinition(
+            name = "adb_pair",
+            description = "Pair with a device for Wireless Debugging using a pairing code (Android 11+).",
+            parameters = mapOf(
+                "host" to "The IP address of the device",
+                "port" to "The pairing port",
+                "pairing_code" to "The 6-digit pairing code shown on the device"
+            )
+        ))
+
+        register(ToolDefinition(
+            name = "adb_status",
+            description = "Check the current status and connectivity of the ADB bridge.",
+            parameters = emptyMap()
+        ))
     }
 
     fun register(tool: ToolDefinition) {
@@ -182,7 +209,8 @@ data class ToolDefinition(
 class ToolExecutor(
     private val workingDir: String = "/data/data/com.elysium.code/files/home",
     var prootPath: String? = null,
-    var rootfsDir: String? = null
+    var rootfsDir: String? = null,
+    private val adbBridgeManager: AdbBridgeManager? = null
 ) {
     companion object {
         private const val TAG = "ToolExecutor"
@@ -204,6 +232,9 @@ class ToolExecutor(
                 "git_status" -> gitCommand(toolCall.args, "status")
                 "git_diff" -> gitCommand(toolCall.args, "diff")
                 "git_log" -> gitCommand(toolCall.args, "log --oneline -n 10")
+                "adb_command" -> executeAdb(toolCall.args)
+                "adb_pair" -> executeAdbPair(toolCall.args)
+                "adb_status" -> adbStatus()
                 else -> ToolResult(
                     output = "Unknown tool: ${toolCall.name}",
                     success = false,
@@ -409,5 +440,46 @@ class ToolExecutor(
         }
 
         return executeCommand(JsonObject(mapOf("command" to JsonPrimitive(cmd))))
+    }
+
+    private fun executeAdb(args: Any): ToolResult {
+        if (adbBridgeManager == null) return ToolResult("ADB Bridge not initialized", false)
+        
+        val jsonArgs = args as? JsonObject
+        val command = jsonArgs?.get("command")?.jsonPrimitive?.content ?: args.toString()
+        val host = jsonArgs?.get("host")?.jsonPrimitive?.content ?: "localhost"
+        val port = jsonArgs?.get("port")?.jsonPrimitive?.content?.toIntOrNull() ?: 5555
+
+        adbBridgeManager.connect(host, port)
+        val output = adbBridgeManager.executeAdbCommand(command)
+        
+        return ToolResult(output, adbBridgeManager.isConnected.value)
+    }
+
+    private fun executeAdbPair(args: Any): ToolResult {
+        if (adbBridgeManager == null) return ToolResult("ADB Bridge not initialized", false)
+        
+        val jsonArgs = args as? JsonObject
+        val host = jsonArgs?.get("host")?.jsonPrimitive?.content ?: return ToolResult("Missing host", false)
+        val port = jsonArgs?.get("port")?.jsonPrimitive?.content?.toIntOrNull() ?: return ToolResult("Missing port", false)
+        val code = jsonArgs?.get("pairing_code")?.jsonPrimitive?.content ?: return ToolResult("Missing pairing_code", false)
+
+        val output = adbBridgeManager.pair(host, port, code)
+        return ToolResult(output, adbBridgeManager.isConnected.value)
+    }
+
+    private fun adbStatus(): ToolResult {
+        if (adbBridgeManager == null) return ToolResult("ADB Bridge not initialized", false)
+        
+        val status = if (adbBridgeManager.isConnected.value) "Connected" else "Disconnected"
+        val info = buildString {
+            appendLine("ADB Status: $status")
+            if (!adbBridgeManager.isConnected.value) {
+                appendLine()
+                appendLine(adbBridgeManager.getPairingInstructions())
+            }
+        }
+        
+        return ToolResult(info, true)
     }
 }

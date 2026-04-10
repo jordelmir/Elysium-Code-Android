@@ -12,6 +12,9 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
 import java.util.zip.ZipInputStream
+import android.net.Uri
+import android.provider.DocumentsContract
+import androidx.documentfile.provider.DocumentFile
 
 /**
  * ═══════════════════════════════════════════════════════════════
@@ -39,6 +42,7 @@ class ModelManager(private val context: Context) {
         val name: String = "Gemma 4 E4B",
         val filename: String = MODEL_FILENAME,
         val sizeBytes: Long = 0,
+        val architecture: String? = null,
         val quantization: String = "Q4_K_M",
         val isExtracted: Boolean = false,
         val path: String = "",
@@ -48,6 +52,9 @@ class ModelManager(private val context: Context) {
 
     private val _extractionProgress = MutableStateFlow(0f)
     val extractionProgress: StateFlow<Float> = _extractionProgress.asStateFlow()
+
+    private val _discoveredModels = MutableStateFlow<List<GgufParser.GgufMetadata>>(emptyList())
+    val discoveredModels: StateFlow<List<GgufParser.GgufMetadata>> = _discoveredModels.asStateFlow()
 
     private val _modelInfo = MutableStateFlow(ModelInfo())
     val modelInfo: StateFlow<ModelInfo> = _modelInfo.asStateFlow()
@@ -75,6 +82,69 @@ class ModelManager(private val context: Context) {
      * Get the path to the current model file
      */
     fun getModelPath(): String = _modelInfo.value.path.ifEmpty { modelFile.absolutePath }
+
+    /**
+     * Set a specific model from the discovered library as active
+     */
+    fun setSelectedModel(metadata: GgufParser.GgufMetadata, path: String) {
+        _modelInfo.value = _modelInfo.value.copy(
+            name = metadata.name ?: "Unknown Model",
+            path = path,
+            architecture = metadata.architecture,
+            quantization = metadata.quantization ?: "Unknown",
+            sizeBytes = File(path).length()
+        )
+        Log.i(TAG, "Selected model: ${metadata.name} at $path")
+    }
+
+    /**
+     * Scan a directory using modern Android Storage Access Framework (SAF)
+     */
+    suspend fun scanFolder(treeUri: Uri) = withContext(Dispatchers.IO) {
+        Log.i(TAG, "Scanning folder: $treeUri")
+        val rootDoc = DocumentFile.fromTreeUri(context, treeUri) ?: return@withContext
+        val ggufs = mutableListOf<GgufParser.GgufMetadata>()
+        
+        scanDocumentRecursive(rootDoc, ggufs)
+        _discoveredModels.value = ggufs
+        Log.i(TAG, "Scan complete. Found ${ggufs.size} models.")
+    }
+
+    private fun scanDocumentRecursive(doc: DocumentFile, list: MutableList<GgufParser.GgufMetadata>) {
+        if (doc.isDirectory) {
+            doc.listFiles().forEach { scanDocumentRecursive(it, list) }
+        } else if (doc.name?.endsWith(".gguf") == true) {
+            // Internal file path resolution for GGUF parsing
+            // Note: On newer Android, we might need to copy to cache if URI is opaque, 
+            // but for /sdcard/ models we can often resolve the path.
+            val path = resolveDocPath(doc)
+            if (path != null) {
+                GgufParser(File(path)).parse()?.let { 
+                    // Add extra info like the resolved path to a wrapper if needed, 
+                    // but here we just update the metadata
+                    list.add(it)
+                }
+            }
+        }
+    }
+
+    /**
+     * Resolve SAF URI to a local file path if possible
+     */
+    private fun resolveDocPath(doc: DocumentFile): String? {
+        val uri = doc.uri
+        if (uri.scheme == "file") return uri.path
+        
+        // This is a simplified path resolver for ExternalStorageProvider
+        if (uri.authority == "com.android.externalstorage.documents") {
+            val docId = DocumentsContract.getTreeDocumentId(uri)
+            val split = docId.split(":")
+            if (split.size >= 2) {
+                return "/sdcard/${split[1]}"
+            }
+        }
+        return null
+    }
 
     /**
      * Extract the model from APK assets to internal storage.

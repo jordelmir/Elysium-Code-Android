@@ -8,6 +8,7 @@ import com.elysium.code.ai.MultimodalProcessor
 import com.elysium.code.memory.MemoryEngine
 import com.elysium.code.memory.TaskOutcome
 import com.elysium.code.memory.KnowledgeCategory
+import com.elysium.code.ai.ModelManager
 import com.elysium.code.plugins.PersonalityEngine
 import com.elysium.code.plugins.SkillsParser
 import kotlinx.coroutines.*
@@ -43,6 +44,7 @@ import kotlinx.serialization.json.jsonPrimitive
  */
 class AgentOrchestrator(
     private val engine: LlamaEngine,
+    private val modelManager: ModelManager,
     private val toolRegistry: ToolRegistry,
     private val toolExecutor: ToolExecutor,
     private val memoryEngine: MemoryEngine,
@@ -158,13 +160,29 @@ class AgentOrchestrator(
 
                     engine.tokenStream.let { flow ->
                         val collectJob = launch {
+                            var isThinking = false
                             flow.collect { token ->
                                 if (!firstTokenReceived) {
                                     _agentState.value = AgentState.GENERATING
                                     firstTokenReceived = true
                                 }
+                                
                                 response.append(token)
-                                _currentResponse.value = response.toString()
+                                val currentText = response.toString()
+                                
+                                // Thinking Tag Detection
+                                if (currentText.contains("<think>") && !isThinking) {
+                                    isThinking = true
+                                    _agentState.value = AgentState.THINKING
+                                    _currentAction.value = "Reasoning..."
+                                }
+                                if (currentText.contains("</think>") && isThinking) {
+                                    isThinking = false
+                                    _agentState.value = AgentState.GENERATING
+                                    _currentAction.value = null
+                                }
+                                
+                                _currentResponse.value = currentText
                                 _streamingText.emit(token)
                             }
                         }
@@ -219,10 +237,17 @@ class AgentOrchestrator(
 
                         val result = toolExecutor.execute(toolCall)
 
+                        // Hardened Logic: Self-Correction on Error
+                        if (!result.success) {
+                            _agentState.value = AgentState.REFLECTING
+                            _currentAction.value = "Analyzing failure of ${toolCall.name}..."
+                            Log.w(TAG, "Tool ${toolCall.name} failed: ${result.error}")
+                        }
+
                         // Add tool result to conversation
                         val toolMsg = ChatMessage(
                             role = MessageRole.TOOL,
-                            content = "Tool: ${toolCall.name}\nResult: ${result.output}",
+                            content = "Tool: ${toolCall.name}\nResult: ${result.output}\nSuccess: ${result.success}",
                             toolName = toolCall.name,
                             timestamp = System.currentTimeMillis()
                         )
@@ -322,11 +347,23 @@ class AgentOrchestrator(
         val personality = personalityEngine.getActivePersonalityPrompt()
         val skills = skillsParser.getActiveSkillsPrompt()
         val tools = toolRegistry.getToolDescriptions()
+        val modelInfo = modelManager.modelInfo.value
 
         return buildString {
             appendLine("You are Elysium, a world-class AI coding assistant running locally on Android.")
+            appendLine("Identity: You are currently utilizing the **${modelInfo.name}** weights (${modelInfo.architecture ?: "GGUF"}).")
+            appendLine("Optimization: You are quantized at ${modelInfo.quantization} for high-performance mobile inference.")
+            appendLine("Reasoning: set enable thinking = true")
             appendLine("You are a top 1% programmer and systems engineer.")
             appendLine("You have access to a real terminal, file system, and code editor on this device.")
+            appendLine()
+            appendLine("## Chain of Thought (Thinking Mode)")
+            appendLine("Before answering complex technical queries or calling tools, you MUST initiate reasoning by wrapping your thoughts in <think> tags.")
+            appendLine("Example:")
+            appendLine("<think>")
+            appendLine("I need to check the file structure before suggesting a change. I will use list_dir.")
+            appendLine("</think>")
+            appendLine("```tool_call { ... } ```")
             appendLine()
 
             // Personality

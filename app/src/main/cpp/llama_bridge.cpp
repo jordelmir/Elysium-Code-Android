@@ -69,14 +69,15 @@ static jstring string_to_jstring(JNIEnv* env, const std::string& str) {
 static void llama_log_callback(ggml_log_level level, const char* text, void* user_data) {
     (void)user_data;
     android_LogPriority priority;
+    const char* prefix = "";
     switch (level) {
-        case GGML_LOG_LEVEL_ERROR: priority = ANDROID_LOG_ERROR; break;
-        case GGML_LOG_LEVEL_WARN:  priority = ANDROID_LOG_WARN;  break;
-        case GGML_LOG_LEVEL_INFO:  priority = ANDROID_LOG_INFO;  break;
-        case GGML_LOG_LEVEL_DEBUG: priority = ANDROID_LOG_DEBUG; break;
+        case GGML_LOG_LEVEL_ERROR: priority = ANDROID_LOG_ERROR; prefix = "❌ ERROR: "; break;
+        case GGML_LOG_LEVEL_WARN:  priority = ANDROID_LOG_WARN;  prefix = "⚠️ WARN: "; break;
+        case GGML_LOG_LEVEL_INFO:  priority = ANDROID_LOG_INFO;  prefix = "ℹ️ INFO: "; break;
+        case GGML_LOG_LEVEL_DEBUG: priority = ANDROID_LOG_DEBUG; prefix = "🔍 DEBUG: "; break;
         default:                   priority = ANDROID_LOG_DEFAULT; break;
     }
-    __android_log_print(priority, "LlamaNative", "%s", text);
+    __android_log_print(priority, "LlamaNative", "%s%s", prefix, text);
 }
 
 // ═══════════════════════════════════════════════════════════════

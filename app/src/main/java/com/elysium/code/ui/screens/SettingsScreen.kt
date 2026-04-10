@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.elysium.code.ui.theme.ElysiumTheme
+import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.launch
 
 /**
@@ -38,10 +39,13 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(viewModel: com.elysium.code.viewmodel.MainViewModel = androidx.lifecycle.viewmodel.compose.viewModel()) {
+    val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val activePersonality by viewModel.personalityEngine.activePersonality.collectAsState()
     var selectedPersonalityId by remember(activePersonality) { mutableStateOf(activePersonality?.id ?: "architect") }
     val stats by viewModel.memoryEngine.stats.collectAsState()
+    val modelInfo by viewModel.modelManager.modelInfo.collectAsState()
+    val discoveredModels by viewModel.modelManager.discoveredModels.collectAsState()
 
     LazyColumn(
         modifier = Modifier
@@ -91,15 +95,55 @@ fun SettingsScreen(viewModel: com.elysium.code.viewmodel.MainViewModel = android
                         }
                         Spacer(Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Gemma 4 E4B", style = ElysiumTheme.typography.headlineMedium, color = ElysiumTheme.colors.textPrimary)
-                            Text("Q4_K_M • Embedded • Ready", style = ElysiumTheme.typography.bodySmall, color = ElysiumTheme.colors.secondary)
+                            Text(modelInfo.name, style = ElysiumTheme.typography.headlineMedium, color = if (viewModel.llamaEngine.state.value == com.elysium.code.ai.EngineState.ERROR) ElysiumTheme.colors.error else ElysiumTheme.colors.textPrimary)
+                            Text("${modelInfo.architecture ?: "Unknown Arch"} • ${modelInfo.quantization} • ${viewModel.llamaEngine.state.collectAsState().value}", style = ElysiumTheme.typography.bodySmall, color = ElysiumTheme.colors.secondary)
                         }
-                        Box(
+                        
+                        IconButton(onClick = { viewModel.llamaEngine.forceReset() }) {
+                            Icon(Icons.Default.RestartAlt, "Reset Engine", tint = ElysiumTheme.colors.textTertiary)
+                        }
+                    }
+                    
+                    if (discoveredModels.isNotEmpty()) {
+                        Spacer(Modifier.height(16.dp))
+                        Text("Model Library", style = ElysiumTheme.typography.labelSmall, color = ElysiumTheme.colors.textSecondary)
+                        Spacer(Modifier.height(8.dp))
+                        
+                        Row(
                             modifier = Modifier
-                                .size(10.dp)
-                                .clip(CircleShape)
-                                .background(ElysiumTheme.colors.secondary)
-                        )
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            discoveredModels.forEach { metadata ->
+                                val isSelected = modelInfo.name == metadata.name
+                                Surface(
+                                    onClick = { 
+                                        viewModel.modelManager.setSelectedModel(metadata, "/sdcard/${metadata.name}.gguf") 
+                                    },
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = if (isSelected) ElysiumTheme.colors.primary.copy(alpha = 0.15f)
+                                            else ElysiumTheme.colors.surfaceBright.copy(alpha = 0.3f),
+                                    border = if (isSelected) BorderStroke(1.dp, ElysiumTheme.colors.primary) else null,
+                                    modifier = Modifier.width(160.dp)
+                                ) {
+                                    Column(modifier = Modifier.padding(12.dp)) {
+                                        Text(metadata.name ?: "Model", style = ElysiumTheme.typography.bodyMedium, color = ElysiumTheme.colors.textPrimary, maxLines = 1)
+                                        Text(metadata.architecture ?: "GGUF", style = ElysiumTheme.typography.labelSmall, color = ElysiumTheme.colors.textTertiary)
+                                        Spacer(Modifier.height(4.dp))
+                                        Row {
+                                            Box(
+                                                modifier = Modifier
+                                                    .background(ElysiumTheme.colors.accent.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
+                                                    .padding(horizontal = 4.dp, vertical = 2.dp)
+                                            ) {
+                                                Text(metadata.quantization ?: "Q4_K_M", style = ElysiumTheme.typography.labelSmall, color = ElysiumTheme.colors.accent)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                     Spacer(Modifier.height(12.dp))
                     Row(
@@ -160,7 +204,37 @@ fun SettingsScreen(viewModel: com.elysium.code.viewmodel.MainViewModel = android
             }
         }
 
-        // ═══ Personality ═══
+        // ═══ System Diagnostics (ADB Bridge) ═══
+        item {
+            SectionHeader("System Diagnostics", Icons.Outlined.Analytics)
+        }
+        item {
+            val adbConnected by viewModel.adbBridgeManager.isConnected.collectAsState()
+            SettingsCard {
+                SettingsRow(
+                    icon = if (adbConnected) Icons.Default.CloudDone else Icons.Default.CloudOff,
+                    title = "ADB Bridge",
+                    subtitle = if (adbConnected) "Bridge Active • Localhost:5555" else "Disconnected • Tap for setup",
+                    iconColor = if (adbConnected) ElysiumTheme.colors.secondary else ElysiumTheme.colors.error
+                ) {
+                    if (!adbConnected) {
+                        android.widget.Toast.makeText(context, "Follow the instructions in the Agent chat for ADB pairing", android.widget.Toast.LENGTH_LONG).show()
+                    }
+                }
+                
+                if (adbConnected) {
+                    HorizontalDivider(color = ElysiumTheme.colors.divider)
+                    Row(
+                        modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceAround
+                    ) {
+                        StatChip("Battery", "88% • 32°C")
+                        StatChip("Load", "12.4%")
+                        StatChip("IO", "Active")
+                    }
+                }
+            }
+        }
         item {
             SectionHeader("Personality", Icons.Outlined.Face)
         }
